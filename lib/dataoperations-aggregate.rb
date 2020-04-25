@@ -24,6 +24,7 @@ module DataOperations
                     keep_interval:DEFAULT_KEEP_INTERVAL,
                     field_no_data_value:DEFAULT_FIELD_NO_DATA_VALUE,
                     processing_mode:DEFAULT_PROCESSING_MODE,
+                    aggregator_name:nil,
                     log:Logger.new(STDOUT),
                     aggregation_names:,
                     group_field_names:,
@@ -38,6 +39,7 @@ module DataOperations
           @keep_interval = keep_interval
           @field_no_data_value = field_no_data_value
           @processing_mode = processing_mode
+          @aggregator_name = aggregator_name
           
           
           if aggregation_names.nil? || ! aggregation_names.is_a?(Array)
@@ -171,7 +173,7 @@ module DataOperations
 
                           aggregator_data["time"] = aggregator_item_key
                           aggregator_data["processed"] = aggregator_item_value["processed"]
-                          aggregator_data["aggregator_id"] = @aggregator_name
+                          aggregator_data["aggregator_id"] = @aggregator_name if @aggregator_name
                           
                           #Add entry in accumulative aggregation hash
                           group_item_value['intervals'].keys[1..-1].each{|interval_secs|
@@ -244,7 +246,7 @@ module DataOperations
 
                           aggregator_data["time"] = aggregator_item_key
                           aggregator_data["processed"] = aggregator_item_value["processed"]
-                          aggregator_data["aggregator_id"] = @aggregator_name
+                          aggregator_data["aggregator_id"] = @aggregator_name if @aggregator_name
                           aggregator_item_value["aggregate_fields"].each{|field_name,field_data|
                               field_data.each{|operation,vector|
                                   case operation
