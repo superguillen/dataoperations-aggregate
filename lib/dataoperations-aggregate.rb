@@ -72,6 +72,7 @@ module DataOperations
         end
       end
 
+      @aggregator_mutex = Mutex.new
       # TODO:
       # - Duplicate intervals - Done
       # - Sort intervals - Done
@@ -116,14 +117,14 @@ module DataOperations
         aggregator_item['aggregate_fields'] = aggregate_detail
         aggregator_item['intervals'] = interval_detail
 
-        @aggregator[hash_group_key] = aggregator_item
+        @aggregator_mutex.synchronize {@aggregator[hash_group_key] = aggregator_item}
       end
 
       if !aggregator_item['aggregate_fields'].key?(aggregator_hash_key)
         hash_aggregator = {}
         hash_aggregator[:time_started] = Time.now.to_i
         hash_aggregator['processed'] = 1
-        aggregator_item['aggregate_fields'][aggregator_hash_key] = hash_aggregator
+        @aggregator_mutex.synchronize {aggregator_item['aggregate_fields'][aggregator_hash_key] = hash_aggregator}
       else
         aggregator_item['aggregate_fields'][aggregator_hash_key]['processed'] += 1
       end
@@ -150,14 +151,15 @@ module DataOperations
       aggregate_data = {}
 
       # @log.debug @aggregator
-      # @aggregator_mutex.synchronize do
-      current_time = Time.now.to_i
-      @aggregator.each do |group_item_key, group_item_value|
-        aggregate_first_interval(aggregate_data, current_time, group_item_value)
+      @aggregator_mutex.synchronize do
+        current_time = Time.now.to_i
+        @aggregator.each do |group_item_key, group_item_value|
+          aggregate_first_interval(aggregate_data, current_time, group_item_value)
 
-        # Calculate subsecuents aggregations
-        group_item_value['intervals'].keys[1..-1].each do |s_interval|
-          aggregate_subsequents_intervals(aggregate_data, current_time, group_item_value, s_interval)
+          # Calculate subsecuents aggregations
+          group_item_value['intervals'].keys[1..-1].each do |s_interval|
+            aggregate_subsequents_intervals(aggregate_data, current_time, group_item_value, s_interval)
+          end
         end
       end
 
