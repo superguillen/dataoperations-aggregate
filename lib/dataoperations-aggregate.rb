@@ -9,6 +9,7 @@ module DataOperations
     DEFAULT_INTERVALS = [10].freeze
     DEFAULT_FLUSH_INTERVAL = 5
     DEFAULT_PROCESSING_MODE = :batch
+    DEFAULT_TIME_STARTED_MODE = :first_message
     DEFAULT_FIELD_NO_DATA_VALUE = 'no_data'.freeze
     DEFAULT_AGGREGATIONS = %w[sum min max mean median variance standard_deviation].freeze
     VALID_AGGREGATIONS = %w[sum min max mean median variance standard_deviation].freeze
@@ -24,6 +25,7 @@ module DataOperations
                    keep_interval: DEFAULT_KEEP_INTERVAL,
                    field_no_data_value: DEFAULT_FIELD_NO_DATA_VALUE,
                    processing_mode: DEFAULT_PROCESSING_MODE,
+                   time_started_mode: DEFAULT_TIME_STARTED_MODE,
                    aggregator_name: nil,
                    log: Logger.new(STDOUT),
                    aggregation_names:,
@@ -39,6 +41,7 @@ module DataOperations
       @keep_interval = keep_interval
       @field_no_data_value = field_no_data_value
       @processing_mode = processing_mode
+      @time_started_mode = time_started_mode
       @aggregator_name = aggregator_name
 
 
@@ -117,14 +120,14 @@ module DataOperations
         aggregator_item['aggregate_fields'] = aggregate_detail
         aggregator_item['intervals'] = interval_detail
 
-        @aggregator_mutex.synchronize {@aggregator[hash_group_key] = aggregator_item}
+	@aggregator_mutex.synchronize {@aggregator[hash_group_key] = aggregator_item}
       end
 
       if !aggregator_item['aggregate_fields'].key?(aggregator_hash_key)
         hash_aggregator = {}
         hash_aggregator[:time_started] = Time.now.to_i
         hash_aggregator['processed'] = 1
-        @aggregator_mutex.synchronize {aggregator_item['aggregate_fields'][aggregator_hash_key] = hash_aggregator}
+	@aggregator_mutex.synchronize {aggregator_item['aggregate_fields'][aggregator_hash_key] = hash_aggregator}
       else
         aggregator_item['aggregate_fields'][aggregator_hash_key]['processed'] += 1
       end
@@ -249,7 +252,9 @@ module DataOperations
       # @log.debug  "interval_aggregator_item_key: #{interval_aggregator_item_key}"
 
       if interval_aggregator_item_value = group_item_value['intervals'][interval_secs][interval_aggregator_item_key]
-        if interval_aggregator_item_value[:time_started] < aggregator_item_value[:time_started]
+        if @time_started_mode == :first_event && aggregator_item_value[:time_started] < interval_aggregator_item_value[:time_started]
+          interval_aggregator_item_value[:time_started] = aggregator_item_value[:time_started]
+        elseif @time_started_mode == :last_event && aggregator_item_value[:time_started] > interval_aggregator_item_value[:time_started]
           interval_aggregator_item_value[:time_started] = aggregator_item_value[:time_started]
         end
         interval_aggregator_item_value['processed'] += aggregator_item_value['processed']
