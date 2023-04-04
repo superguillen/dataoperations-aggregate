@@ -30,7 +30,9 @@ module DataOperations
                    log: Logger.new(STDOUT),
                    aggregation_names:,
                    group_field_names:,
-                   aggregate_field_names:
+                   aggregate_field_names:,
+                   buckets:,
+                   bucket_metrics:
                 )
       @aggregator = aggregator
       @time_format = time_format
@@ -43,6 +45,8 @@ module DataOperations
       @processing_mode = processing_mode
       @time_started_mode = time_started_mode
       @aggregator_name = aggregator_name
+      @buckets = buckets
+      @bucket_metrics = bucket_metrics
 
 
       if aggregation_names.nil? || !aggregation_names.is_a?(Array)
@@ -229,6 +233,9 @@ module DataOperations
             interval_aggregator_item_value['aggregate_fields'][aggregate_field_key][operation] << data
           end
         end
+        if ! buckets.nil? && ! bucket_metrics.nil?
+          data = calculate_buckets(data, buckets_config)
+        end
       end
     end
 
@@ -310,5 +317,24 @@ module DataOperations
         aggregate_data[s_interval] << aggregator_data
       end
     end
+    
+    #Return Array with count by each bucket
+    def calculate_buckets(data, buckets_config)
+      buckets_config.sort!.uniq!
+      buckets = {}
+    
+      buckets_config.each {|bucket| buckets[bucket] = 0}
+    
+      data.each {|item|
+        buckets_config.each {|bucket|
+          if item <= bucket
+            buckets[bucket] += 1
+            next
+          end
+        }
+      }
+      return buckets
+    end
+
   end
 end
