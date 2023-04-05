@@ -1,7 +1,7 @@
 Gem::Specification.new do |s|
   s.name        = 'dataoperations-aggregate'
-  s.version     = '0.0.6'
-  s.date        = '2020-05-19'
+  s.version     = '0.0.7'
+  s.date        = '2022-04-03'
   s.summary     = "Aggregate data"
   s.description = "Aggregate data over time"
   s.authors     = ["Victor Guillen"]

@@ -12,7 +12,7 @@ module DataOperations
     DEFAULT_TIME_STARTED_MODE = :first_message
     DEFAULT_FIELD_NO_DATA_VALUE = 'no_data'.freeze
     DEFAULT_AGGREGATIONS = %w[sum min max mean median variance standard_deviation].freeze
-    VALID_AGGREGATIONS = %w[sum min max mean median variance standard_deviation].freeze
+    VALID_AGGREGATIONS = %w[sum min max mean median variance standard_deviation bucket].freeze
     DEFAULT_HASH_TIME_FORMAT = '%Y-%m-%dT%H'.freeze
     DEFAULT_INERVAL_SECONDS = 3600
 
@@ -30,7 +30,9 @@ module DataOperations
                    log: Logger.new(STDOUT),
                    aggregation_names:,
                    group_field_names:,
-                   aggregate_field_names:
+                   aggregate_field_names:,
+                   buckets:[],
+                   bucket_metrics:[]
                 )
       @aggregator = aggregator
       @time_format = time_format
@@ -43,6 +45,8 @@ module DataOperations
       @processing_mode = processing_mode
       @time_started_mode = time_started_mode
       @aggregator_name = aggregator_name
+      @buckets = buckets
+      @bucket_metrics = bucket_metrics
 
 
       if aggregation_names.nil? || !aggregation_names.is_a?(Array)
@@ -219,16 +223,51 @@ module DataOperations
       # Aggregate data
       if aggregate_field_value.is_a?(Array)
         @aggregation_names.each do |operation|
-          data = aggregate_field_value.method(operation).call
-          aggregator_data["#{aggregate_field_key}_#{operation}"] = data
+          
+          #If bucket, calculate bucket for metric
+          if operation == 'bucket'
+            #If set buckets and set metrics to calculate (bucket values depends of ranges based in metric activity)
+            if !@buckets.nil? && !@bucket_metrics.nil? && @bucket_metrics.include?(aggregate_field_key)
+              data_bucket = calculate_buckets(aggregate_field_value, @buckets)
+             
+              data_bucket.each {|bucket,bucket_count|
+                #@log.info("#{aggregate_field_key}_#{bucket} = #{bucket_count}")
+                aggregator_data["#{aggregate_field_key}_bucket#{bucket}"] = bucket_count
+              }
 
-          # Add aggregated data to interval
-          group_item_value['intervals'].keys[1..-1].each do |interval_secs|
-            interval_aggregator_item_key = (aggregator_item_key / interval_secs.to_i) * interval_secs.to_i
-            interval_aggregator_item_value = group_item_value['intervals'][interval_secs][interval_aggregator_item_key]
-            interval_aggregator_item_value['aggregate_fields'][aggregate_field_key][operation] << data
+              # Add aggregated data to interval
+              group_item_value['intervals'].keys[1..-1].each do |interval_secs|
+
+                interval_aggregator_item_key = (aggregator_item_key / interval_secs.to_i) * interval_secs.to_i
+                interval_aggregator_item_value = group_item_value['intervals'][interval_secs][interval_aggregator_item_key]
+                data_bucket.each {|bucket,bucket_count|
+                  #@log.info("#{aggregate_field_key}_#{bucket} = #{bucket_count}")
+                  interval_aggregator_item_value['aggregate_fields'][aggregate_field_key]["bucket#{bucket}"] = [] if interval_aggregator_item_value['aggregate_fields'][aggregate_field_key]["bucket#{bucket}"].nil?
+                  interval_aggregator_item_value['aggregate_fields'][aggregate_field_key]["bucket#{bucket}"] << bucket_count
+                }
+                  
+              end
+
+            end
+          else
+            data = aggregate_field_value.method(operation).call
+            aggregator_data["#{aggregate_field_key}_#{operation}"] = data
+
+            # Add aggregated data to interval
+            group_item_value['intervals'].keys[1..-1].each do |interval_secs|
+              interval_aggregator_item_key = (aggregator_item_key / interval_secs.to_i) * interval_secs.to_i
+              interval_aggregator_item_value = group_item_value['intervals'][interval_secs][interval_aggregator_item_key]
+              interval_aggregator_item_value['aggregate_fields'][aggregate_field_key][operation] << data
+            end
           end
+
+
         end
+
+        if !@buckets.nil? && ! @bucket_metrics.nil?
+          #data = calculate_buckets(data, @buckets)
+        end
+
       end
     end
 
@@ -244,6 +283,9 @@ module DataOperations
         @aggregation_names.each do |operation|
           interval_aggregator_item_value['aggregate_fields'][aggregate_field_key][operation] = []
         end
+
+        ##Add buckets metadata (empty hash)
+        ##interval_aggregator_item_value['aggregate_fields'][aggregate_field_key]['buckets']={}
       end
     end
 
@@ -297,10 +339,17 @@ module DataOperations
             case operation
             when 'max', 'min', 'mean', 'median'
               data = vector.method(operation).call
+            when 'bucket'
+              #Bucket operation generate bucket[\d]+
+              data = nil
+            when /^bucket[\d]+/
+              #For buckets sum accumulations for internvals
+              data = vector.method('sum').call
             else
               data = vector.median
             end
-            aggregator_data["#{field_name}_#{operation}"] = data
+            #Nil data is avoid (for example for 'bucket' name operation)
+            aggregator_data["#{field_name}_#{operation}"] = data unless data.nil?
           end
         end
         # @log.debug aggregator_item_value
@@ -310,5 +359,24 @@ module DataOperations
         aggregate_data[s_interval] << aggregator_data
       end
     end
+    
+    #Return Array with count by each bucket
+    def calculate_buckets(data, buckets_config)
+      buckets_config.sort!.uniq!
+      buckets = {}
+    
+      buckets_config.each {|bucket| buckets[bucket] = 0}
+    
+      data.each {|item|
+        buckets_config.each {|bucket|
+          if item <= bucket
+            buckets[bucket] += 1
+            next
+          end
+        }
+      }
+      return buckets
+    end
+
   end
 end
