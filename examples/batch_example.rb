@@ -14,15 +14,17 @@ require 'socket'
 @group_fields = ['app','server']
 @aggregations = ['sum','min','max','histogram']
 @aggregate_fields = ['response_time_ms']
-@histogram_buckets = [50,100]
+#@histogram_buckets = [50,100]
+@histogram_buckets = [50,120]
 @histogram_fields = ['response_time_ms']
-@histogram_cumulative = false
+@histogram_cumulative = true
+#@histogram_cumulative = false
 @histogram_bucket_infinite_enabled = true
-#@histogram_bucket_comparation = :greater_or_equal
-@histogram_bucket_comparation = :less_or_equal
+@histogram_bucket_comparation = :greater_or_equal
+#@histogram_bucket_comparation = :less_or_equal
 
 
-VALID_AGGREGATIONS = ['sum','min','max','mean','median','variance','standard_deviation','bucket']
+VALID_AGGREGATIONS = ['sum','min','max','mean','median','variance','standard_deviation','histogram']
 
 @intervals = [5,10]
 
@@ -59,23 +61,35 @@ VALID_AGGREGATIONS = ['sum','min','max','mean','median','variance','standard_dev
         histogram_bucket_comparation: @histogram_bucket_comparation)
 
 ######## Load sample data
-record = {'app'=>'app01','server'=>'server01','response_time_ms'=>50}
-@data_operations.add_events(record)
-record = {'app'=>'app01','server'=>'server01','response_time_ms'=>90}
-@data_operations.add_events(record)
-record = {'app'=>'app01','server'=>'server01','response_time_ms'=>110}
-@data_operations.add_events(record)
+#record = {'app'=>'app01','server'=>'server01','response_time_ms'=>50}
+#@data_operations.add_events(record)
+#record = {'app'=>'app01','server'=>'server01','response_time_ms'=>90}
+#@data_operations.add_events(record)
+#record = {'app'=>'app01','server'=>'server01','response_time_ms'=>110}
+#@data_operations.add_events(record)
 #sleep 1
-record = {'app'=>'app01','server'=>'server01','response_time_ms'=>25}
-@data_operations.add_events(record)
-record = {'app'=>'app01','server'=>'server01','response_time_ms'=>50}
-@data_operations.add_events(record)
-record = {'app'=>'app01','server'=>'server01','response_time_ms'=>110}
-@data_operations.add_events(record)
+#record = {'app'=>'app01','server'=>'server01','response_time_ms'=>25}
+#@data_operations.add_events(record)
+#record = {'app'=>'app01','server'=>'server01','response_time_ms'=>50}
+#@data_operations.add_events(record)
+#record = {'app'=>'app01','server'=>'server01','response_time_ms'=>110}
+#@data_operations.add_events(record)
 #sleep 5
 
 log = Logger.new(STDOUT)
 
+record = {'app'=>'app01','server'=>'server01','response_time_ms'=>60}
+@data_operations.add_events(record)
+record = {'app'=>'app01','server'=>'server01','response_time_ms'=>110}
+@data_operations.add_events(record)
+
 log.info(@data_operations.aggregate_data)
 
+
+log.info(@data_operations.aggregate_events)
+
+record = {'app'=>'app01','server'=>'server01','response_time_ms'=>60}
+@data_operations.add_events(record)
+record = {'app'=>'app01','server'=>'server01','response_time_ms'=>110}
+@data_operations.add_events(record)
 log.info(@data_operations.aggregate_events)

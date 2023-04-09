@@ -387,6 +387,7 @@ module DataOperations
       data.each do|item|
         item_in_bucket = false
         buckets_config.each do|bucket|
+          item_in_bucket = false
           if @histogram_bucket_comparation == :less_or_equal
             if item <= bucket
               item_in_bucket = true

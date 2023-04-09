@@ -1,6 +1,6 @@
 Gem::Specification.new do |s|
   s.name        = 'dataoperations-aggregate'
-  s.version     = '0.0.8'
+  s.version     = '0.0.9'
   s.date        = '2023-04-09'
   s.summary     = "Aggregate data"
   s.description = "Aggregate data over time"
