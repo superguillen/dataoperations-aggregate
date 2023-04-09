@@ -12,7 +12,10 @@ module DataOperations
     DEFAULT_TIME_STARTED_MODE = :first_message
     DEFAULT_FIELD_NO_DATA_VALUE = 'no_data'.freeze
     DEFAULT_AGGREGATIONS = %w[sum min max mean median variance standard_deviation].freeze
-    VALID_AGGREGATIONS = %w[sum min max mean median variance standard_deviation bucket].freeze
+    VALID_AGGREGATIONS = %w[sum min max mean median variance standard_deviation histogram].freeze
+    DEFAULT_HISTOGRAM_CUMULATIVE = false
+    DEFAULT_HISTOGRAM_BUCKET_INFINITE_ENABLED = true
+    DEFAULT_HISTOGRAM_BUCKET_COMPARATION = :less_or_equal
     DEFAULT_HASH_TIME_FORMAT = '%Y-%m-%dT%H'.freeze
     DEFAULT_INERVAL_SECONDS = 3600
 
@@ -31,8 +34,11 @@ module DataOperations
                    aggregation_names:,
                    group_field_names:,
                    aggregate_field_names:,
-                   buckets:[],
-                   bucket_metrics:[]
+                   histogram_cumulative: DEFAULT_HISTOGRAM_CUMULATIVE,
+                   histogram_bucket_infinite_enabled: DEFAULT_HISTOGRAM_BUCKET_INFINITE_ENABLED,
+                   histogram_bucket_comparation: DEFAULT_HISTOGRAM_BUCKET_COMPARATION,
+                   histogram_buckets:[],
+                   histogram_fields:[]
                 )
       @aggregator = aggregator
       @time_format = time_format
@@ -45,8 +51,11 @@ module DataOperations
       @processing_mode = processing_mode
       @time_started_mode = time_started_mode
       @aggregator_name = aggregator_name
-      @buckets = buckets
-      @bucket_metrics = bucket_metrics
+      @histogram_cumulative = histogram_cumulative
+      @histogram_bucket_infinite_enabled = histogram_bucket_infinite_enabled
+      @histogram_bucket_comparation = histogram_bucket_comparation
+      @histogram_buckets = histogram_buckets
+      @histogram_fields = histogram_fields
 
 
       if aggregation_names.nil? || !aggregation_names.is_a?(Array)
@@ -224,15 +233,20 @@ module DataOperations
       if aggregate_field_value.is_a?(Array)
         @aggregation_names.each do |operation|
           
-          #If bucket, calculate bucket for metric
-          if operation == 'bucket'
+          #If histogram, calculate bucket for metric
+          if operation == 'histogram'
+            if @histogram_bucket_comparation == :less_or_equal
+              bucket_comparation = "le"
+            else
+              bucket_comparation = "ge"
+            end
             #If set buckets and set metrics to calculate (bucket values depends of ranges based in metric activity)
-            if !@buckets.nil? && !@bucket_metrics.nil? && @bucket_metrics.include?(aggregate_field_key)
-              data_bucket = calculate_buckets(aggregate_field_value, @buckets)
+            if !@histogram_buckets.nil? && !@histogram_fields.nil? && @histogram_fields.include?(aggregate_field_key)
+              data_bucket = calculate_histogram_buckets(aggregate_field_value, @histogram_buckets)
              
               data_bucket.each {|bucket,bucket_count|
                 #@log.info("#{aggregate_field_key}_#{bucket} = #{bucket_count}")
-                aggregator_data["#{aggregate_field_key}_bucket#{bucket}"] = bucket_count
+                aggregator_data["#{aggregate_field_key}_bucket_#{bucket_comparation}_#{bucket}"] = bucket_count
               }
 
               # Add aggregated data to interval
@@ -242,8 +256,8 @@ module DataOperations
                 interval_aggregator_item_value = group_item_value['intervals'][interval_secs][interval_aggregator_item_key]
                 data_bucket.each {|bucket,bucket_count|
                   #@log.info("#{aggregate_field_key}_#{bucket} = #{bucket_count}")
-                  interval_aggregator_item_value['aggregate_fields'][aggregate_field_key]["bucket#{bucket}"] = [] if interval_aggregator_item_value['aggregate_fields'][aggregate_field_key]["bucket#{bucket}"].nil?
-                  interval_aggregator_item_value['aggregate_fields'][aggregate_field_key]["bucket#{bucket}"] << bucket_count
+                  interval_aggregator_item_value['aggregate_fields'][aggregate_field_key]["bucket_#{bucket_comparation}_#{bucket}"] = [] if interval_aggregator_item_value['aggregate_fields'][aggregate_field_key]["bucket#{bucket}"].nil?
+                  interval_aggregator_item_value['aggregate_fields'][aggregate_field_key]["bucket_#{bucket_comparation}_#{bucket}"] << bucket_count
                 }
                   
               end
@@ -264,10 +278,6 @@ module DataOperations
 
         end
 
-        if !@buckets.nil? && ! @bucket_metrics.nil?
-          #data = calculate_buckets(data, @buckets)
-        end
-
       end
     end
 
@@ -284,8 +294,6 @@ module DataOperations
           interval_aggregator_item_value['aggregate_fields'][aggregate_field_key][operation] = []
         end
 
-        ##Add buckets metadata (empty hash)
-        ##interval_aggregator_item_value['aggregate_fields'][aggregate_field_key]['buckets']={}
       end
     end
 
@@ -339,10 +347,10 @@ module DataOperations
             case operation
             when 'max', 'min', 'mean', 'median'
               data = vector.method(operation).call
-            when 'bucket'
+            when 'histogram'
               #Bucket operation generate bucket[\d]+
               data = nil
-            when /^bucket[\d]+/
+            when /^bucket.+/
               #For buckets sum accumulations for internvals
               data = vector.method('sum').call
             else
@@ -361,20 +369,48 @@ module DataOperations
     end
     
     #Return Array with count by each bucket
-    def calculate_buckets(data, buckets_config)
-      buckets_config.sort!.uniq!
+    def calculate_histogram_buckets(data, buckets_config)
+
+      if @histogram_bucket_comparation == :less_or_equal
+        buckets_config.sort!.uniq!
+      else
+        buckets_config.reverse!.uniq!
+      end
+      
       buckets = {}
     
       buckets_config.each {|bucket| buckets[bucket] = 0}
     
-      data.each {|item|
-        buckets_config.each {|bucket|
-          if item <= bucket
-            buckets[bucket] += 1
-            next
+      #By default add Inf bucket
+      buckets["Inf"] = 0 if @histogram_bucket_infinite_enabled
+
+      data.each do|item|
+        item_in_bucket = false
+        buckets_config.each do|bucket|
+          if @histogram_bucket_comparation == :less_or_equal
+            if item <= bucket
+              item_in_bucket = true
+            end
+          elsif item >= bucket
+              item_in_bucket = true
           end
-        }
-      }
+
+          if item_in_bucket
+            buckets[bucket] += 1
+            #Not accumule if histogram cumulative is false
+            break if !@histogram_cumulative
+          end
+        end
+
+        #Only count Inf bucket if enabled
+        if @histogram_bucket_infinite_enabled
+          if !item_in_bucket
+            buckets["Inf"] += 1
+          elsif @histogram_cumulative
+            buckets["Inf"] += 1
+          end
+        end
+      end
       return buckets
     end
 
