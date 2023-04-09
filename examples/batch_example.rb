@@ -12,10 +12,15 @@ require 'socket'
 @time_started_mode = 'first_event'
 @aggregator_suffix_name = 'woker_0'
 @group_fields = ['app','server']
-@aggregations = ['sum','min','max','bucket']
+@aggregations = ['sum','min','max','histogram']
 @aggregate_fields = ['response_time_ms']
-@buckets = [50,100]
-@bucket_metrics = ['response_time_ms']
+@histogram_buckets = [50,100]
+@histogram_fields = ['response_time_ms']
+@histogram_cumulative = false
+@histogram_bucket_infinite_enabled = true
+#@histogram_bucket_comparation = :greater_or_equal
+@histogram_bucket_comparation = :less_or_equal
+
 
 VALID_AGGREGATIONS = ['sum','min','max','mean','median','variance','standard_deviation','bucket']
 
@@ -47,16 +52,23 @@ VALID_AGGREGATIONS = ['sum','min','max','mean','median','variance','standard_dev
         aggregation_names: @aggregation_names,
         group_field_names: @group_field_names,
         aggregate_field_names: @aggregate_field_names,
-        buckets: @buckets,
-        bucket_metrics: @bucket_metrics)
+        histogram_buckets: @histogram_buckets,
+        histogram_fields: @histogram_fields,
+        histogram_cumulative: @histogram_cumulative,
+        histogram_bucket_infinite_enabled: @histogram_bucket_infinite_enabled,
+        histogram_bucket_comparation: @histogram_bucket_comparation)
 
 ######## Load sample data
-record = {'app'=>'app01','server'=>'server01','response_time_ms'=>100}
+record = {'app'=>'app01','server'=>'server01','response_time_ms'=>50}
+@data_operations.add_events(record)
+record = {'app'=>'app01','server'=>'server01','response_time_ms'=>90}
 @data_operations.add_events(record)
 record = {'app'=>'app01','server'=>'server01','response_time_ms'=>110}
 @data_operations.add_events(record)
 #sleep 1
-record = {'app'=>'app01','server'=>'server01','response_time_ms'=>100}
+record = {'app'=>'app01','server'=>'server01','response_time_ms'=>25}
+@data_operations.add_events(record)
+record = {'app'=>'app01','server'=>'server01','response_time_ms'=>50}
 @data_operations.add_events(record)
 record = {'app'=>'app01','server'=>'server01','response_time_ms'=>110}
 @data_operations.add_events(record)
